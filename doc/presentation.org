@@ -1,0 +1,311 @@
++Title: Schema vs Spec
+
+
+* Introduction
+
+  *This talk*
+
+ - My name is _Janos Erdos_ and I am a Java/Clojure programmer at dbx.hu
+
+ - This talk is about two approaches of validating data in Clojure.
+
+
+ *The presentation*
+
+ - Use Emacs with =org-mode= org =org-tree-slide-mode=
+
+
+* Schema
+
+- Open Sourced by Prismatic in 2014
+- Used mainly for data validation
+- Optimized to easily read and reuse
+- Available at https://github.com/prismatic/schema
+- Dependency: =['prismatic/schema "1.1.3"]=
+
+** Schema usage
+
+First, we define schemas...
+
+#+begin_src clojure
+(s/defschema Person
+  {:name s/Str
+   :age  s/Int})
+#+end_src
+
+...and validate data with them...
+
+#+begin_src clojure
+(s/validate Person nil)
+(s/validate Person {:name "Me" :age true})
+(s/validate Person {:name "Me" :age 25})
+#+end_src
+
+...or explain a schema.
+
+#+begin_src clojure
+(s/explain Person)
+#+end_src
+
+** Primitive schemas
+
+Most basic schemas do not depend on other schemas.
+
+- Examples: =Any, Int, Keyword, Bool, Symbol, Str=
+
+#+begin_src clojure
+(s/validate s/Int 23)
+#+end_src
+
+There are also ways to create schemas.
+
+Examples: =eq, maybe, enum=
+
+#+begin_src clojure
+(s/validate (s/maybe (s/eq 42)) 42)
+(s/validate (s/eq 42) 42)
+(s/validate (s/enum 1 2 3) 1)
+#+end_src clojure
+
+** Data structures as schemas
+
+*** Maps
+
+We can validate keys and values in maps.
+
+#+begin_src clojure
+(s/validate {s/Keyword s/Str} {:a "Alma"})
+#+end_src
+
+And also specify optional or required keys.
+
+#+begin_src clojure
+(s/defschema Person
+  {(s/optional-key :age)  s/Int
+   (s/required-key :name) s/Str})
+
+(s/validate Person {:name "E"})
+#+end_src
+
+*** Sequences
+
+ - Use =s/one= to match one element in a sequence
+ - Use =s/optional= to match at most one element
+
+ *Examples:*
+
+#+begin_src clojure
+(s/defschema IntVec [s/Int])
+
+(s/validate IntVec [1 2 2 2])
+
+(s/defschema Color
+  [(s/one s/Str "mode")
+   (s/one s/Int "r")
+   (s/one s/Int "g")
+   (s/one s/Int "b")
+   (s/optional Double "alpha")])
+
+(s/validate Color ["Piros" 255 0 0])
+(s/validate Color ["Atlatszo Piros" 255 0 0 0.3])
+#+end_src
+
+** More complex schemas
+
+- Use =s/pred= to check for a predicate: =(s/pred odd?)=
+
+- Use =s/conditional= to dispatch on variant (just like =cond=)
+  - Like in =(cond ...)= clauses
+  - Example: =(s/conditional number? (s/pred odd?) :else s/Str)=
+  - Shorthand: =(s/if number? (s/pred odd?) s/Str)=
+
+- Use =s/constrained= to add postcondition to a schema.
+  - To get nice error messages
+  - Example: =(s/constrained long odd?)=
+
+- Disjunction: =s/either=
+
+- Conjunction: =s/both=
+
+- Tuples: =(s/pair s1 s2)=
+
+- Recursive schemas
+
+
+** Defining schemas
+
+- For named schemas we use the =s/defschema= forms
+
+- Use =s/def= to define a schema checked var.
+
+- Also, =s/defn= and =s/fn= for functions, =defrecord= for records
+
+- We can add =^:always-validate= meta key to toggle validation
+
+
+** Testing
+
+- In a validation context
+  in a =(with-fn-validation)= form
+
+- In testing
+  =(use-fixtures :once schema-test/validate-schema)=
+
+- In the code:
+  =s/validate=, =s/check=, =s/checker=
+
+- In the REPL: =(set-fn-validation! true)=
+
+- In production: =(set-compile-fn-validation! true)=
+
+
+** Coercion
+
+   The =s/coercer= creates a function to coerce and validate data.
+
+   The wrapped function should return a coerced object or an =ErrorContainer=
+
+   function coerces and validate data.
+
+#+begin_src clojure
+(def my-matcher
+  {s/Int  #(Integer/parseInt %)})
+
+(def my-coercer (c/coercer [s/Int] my-matcher))
+
+(my-coercer ["1" "2" "3"]) ;; => [1 2 3]
+#+end_src
+
+
+** Generative testing
+
+   Use the *schema-generators* library to generate data matching a schema.
+
+ - Use =(g/generate s)= and =(g/sample s n)= for random samples
+
+ - Use =(gc/complete)= to fill incomplete data that validates
+
+
+** Schema overview
+
+- Optimized to compose, read and write
+- Thus great for documentation
+- Widely adopted
+
+
+* Spec
+
+- are to be introduced in Clojure 1.9
+- support in the core language
+-
+
+#+begin_src clojure
+(println "egy")
+#+end_src
+
+** Simple specs
+
+ - nilable allows nil values: =(s/nilable? s)=
+ -
+
+** Composing specs
+
+ - Conjunctions: =(s/and s1, s2, ..., sn)=
+   - all specs are conformed
+
+ - Disjunctions: =(s/or :k1 s1, :k2 s2)=
+   - choices are tagged with keywords
+   - one specs is conformed
+   - conform returns a tuple of tag name and conformed value
+
+** Entity maps
+
+ - Defined by their keys
+
+   =(s/keys ... arguments:req required-keys :opt optional-keys :)=
+
+   Where arguments are:
+
+   - :req, :opt - list of required or optional qualified keys
+
+   Many times keys come in an unqualified form. We can check for them too.
+
+   - :req-un, opt-un - unqualified keys
+
+   We can merge entity maps with =(s/merge m1 m2)= to get a new spec.
+
+** Other collections
+
+   - Use =coll-of=, =map-of= for generalized spec creation.
+   - Use =tuple= for fixed size vectors
+
+   Also, there is a regex-like pattern for sequence matching.
+
+   - Patterns such as: +, *, ?
+   - Use =(s/alt)= for alternate mathcing
+   - Use =(s/cat :k1 s1 ... :kn sn)= for the catenation of sequence specs
+
+** Checking specs
+
+ - Validating: =(s/valid? s value)= returns true/false
+
+ - Conforming: =(s/conform s value)= returns conformed value or =:clojure.spec/invalid=
+
+ - Explaining: =(s/explain s value)= prints to output why a spec does not match
+
+** Checking specs in practive
+
+ - Using =valid?= in pre- and post-conditions
+ - Assertion with =(s/assert s value)=
+   - on success value is returned, error is thrown otherwise
+   - turned off by default, toggle with =(s/check-asserts true)=
+
+** Defining spec'd functions
+
+ We can augment existing functions with spec information with =s/fdef=
+
+#+begin_src clojure
+(defn ranged-rand [start end]
+   (+ start (long (rand (- end start)))))
+
+(s/fdef ranged-rand
+  :args (s/and (s/cat :start int? :end :int)
+               #(< (:start %) (:end %)))
+  :ret int?
+  :fn  (s/and #(>= (:ret %) (-> % :args :start))
+              #(< (:ret %) (-> % :args :end))))
+#+end_src
+
+Macros are also functions, therefore we can spec them too.
+
+** Generative testing
+
+ - =s/gen= creates a generator function
+ - =(gen/generate (s/gen spec))= creates a random sample
+ - =(gen/sample (s/gen spec))= creates multiple samples
+
+ Sometimes we are interested in both the original and conformed sample:
+
+ - =(s/exercise s n)= creates a list n pairs.
+ - for functions we have =(s/exercise-fn f)= that creates random arguments and evalates spec'd function.
+
+ Sometimes generators are not defined but we can combine specs (with =s/and=) to get a generator.
+
+** Data coercion
+
+ Data coercion is done via conformer functions.
+
+ =s/conformer= takes a function that returns a conformed value or =:s/invalid= on failure.
+
+ - The returned spec can be used to _conform_ (coerce) data.
+
+ - An optional second argument can be used to _unform_ data.
+
+
+* Overview
+
+- Alternatives: Example Tests, Types, Schemas, Specs
+
+- Factors: Expressive, Powerful, Integrated, Specification, Testing, Agility, Reach
+
+- Will we move to =core.spec=? Discuss.
