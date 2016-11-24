@@ -115,7 +115,6 @@ And also specify optional or required keys.
 - Use =s/pred= to check for a predicate: =(s/pred odd?)=
 
 - Use =s/conditional= to dispatch on variant (just like =cond=)
-  - Like in =(cond ...)= clauses
   - Example: =(s/conditional number? (s/pred odd?) :else s/Str)=
   - Shorthand: =(s/if number? (s/pred odd?) s/Str)=
 
@@ -123,13 +122,9 @@ And also specify optional or required keys.
   - To get nice error messages
   - Example: =(s/constrained long odd?)=
 
-- Disjunction: =s/either=
-
-- Conjunction: =s/both=
-
 - Tuples: =(s/pair s1 s2)=
 
-- Recursive schemas
+- Also: recursive schemas (using names).
 
 
 ** Defining schemas
@@ -190,24 +185,23 @@ And also specify optional or required keys.
 
 - Optimized to compose, read and write
 - Thus great for documentation
-- Widely adopted
+- Widely adopted (plumbing, fnhouse)
 
 
 * Spec
 
-- are to be introduced in Clojure 1.9
-- support in the core language
--
+ - To be introduced in Clojure 1.9
+ - Support in the core language
+ - Less verbose yet stronger tool
 
 #+begin_src clojure
-(println "egy")
+(require '[clojure.spec :as s])
 #+end_src
 
 ** Simple specs
 
  - nilable allows nil values: =(s/nilable? s)=
- -
-
+ - predicates are all specs
 ** Composing specs
 
  - Conjunctions: =(s/and s1, s2, ..., sn)=
@@ -226,11 +220,11 @@ And also specify optional or required keys.
 
    Where arguments are:
 
-   - :req, :opt - list of required or optional qualified keys
+   - =:req, :opt= - list of required or optional qualified keys
 
    Many times keys come in an unqualified form. We can check for them too.
 
-   - :req-un, opt-un - unqualified keys
+   - =:req-un, opt-un= - unqualified keys
 
    We can merge entity maps with =(s/merge m1 m2)= to get a new spec.
 
@@ -287,21 +281,29 @@ Macros are also functions, therefore we can spec them too.
  Sometimes we are interested in both the original and conformed sample:
 
  - =(s/exercise s n)= creates a list n pairs.
- - for functions we have =(s/exercise-fn f)= that creates random arguments and evalates spec'd function.
+ - for functions we have =(s/exercise-fn f)= that creates random arguments
+   and evalates spec'd function.
 
- Sometimes generators are not defined but we can combine specs (with =s/and=) to get a generator.
+ Sometimes generators are not defined for a predicate. We can combine specs
+ (with =s/and=) to get a generator.
 
 ** Data coercion
 
  Data coercion is done via conformer functions.
 
- =s/conformer= takes a function that returns a conformed value or =:s/invalid= on failure.
+ =s/conformer= takes a function that returns a conformed
+ value or =:s/invalid= on failure.
 
  - The returned spec can be used to _conform_ (coerce) data.
+   Eg.: =(s/conform spec raw-data)=
 
  - An optional second argument can be used to _unform_ data.
+   See: =(s/unform spec conformed-data)=
+
+#+begin_src clojure
 
 
+#+end_src
 * Overview
 
 - Alternatives: Example Tests, Types, Schemas, Specs
